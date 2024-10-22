@@ -1,8 +1,9 @@
 import asyncio
 from typing import Annotated
+from dotenv import load_dotenv, find_dotenv
 
 from livekit import agents, rtc
-from livekit.agents import JobContext, WorkerOptions, cli, tokenize, tts
+from livekit.agents import JobContext, WorkerOptions, cli, tokenize, tts, JobRequest
 from livekit.agents.llm import (
     ChatContext,
     ChatImage,
@@ -11,16 +12,20 @@ from livekit.agents.llm import (
 from livekit.agents.voice_assistant import VoiceAssistant
 from livekit.plugins import deepgram, openai, silero
 
+load_dotenv(find_dotenv())
 
 class AssistantFunction(agents.llm.FunctionContext):
     """This class is used to define functions that will be called by the assistant."""
-
+    
+    # decorator to make a function callable
     @agents.llm.ai_callable(
         description=(
             "Called when asked to evaluate something that would require vision capabilities,"
             "for example, an image, video, or the webcam feed."
         )
     )
+
+    # function defined with vision capabilities
     async def image(
         self,
         user_msg: Annotated[
@@ -33,7 +38,7 @@ class AssistantFunction(agents.llm.FunctionContext):
         print(f"Message triggering vision capabilities: {user_msg}")
         return None
 
-
+# track management if I will trigger the video
 async def get_video_track(room: rtc.Room):
     """Get the first video track from the room. We'll use this track to process images."""
 
@@ -55,13 +60,15 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
     print(f"Room name: {ctx.room.name}")
 
+    # keep allows the system initiate
     chat_context = ChatContext(
         messages=[
             ChatMessage(
                 role="system",
                 content=(
-                    "Your name is Alloy. You are a funny, witty bot. Your interface with users will be voice and vision."
-                    "Respond with short and concise answers. Avoid using unpronouncable punctuation or emojis."
+                   "Seu nome é Alloy. Você é um bot engraçado e espirituoso. Sua interface com os usuários será voz e visão."
+                    "Responda com respostas curtas e concisas. Evite usar pontuação ou emojis impronunciáveis."
+                    "Você tem mais de 30 anos de trabalho em funções altamente técnicas nos setores de petróleo e gás, mineração e energia."
                 ),
             )
         ]
@@ -124,9 +131,10 @@ async def entrypoint(ctx: JobContext):
     assistant.start(ctx.room)
 
     await asyncio.sleep(1)
-    await assistant.say("Hi there! How can I help?", allow_interruptions=True)
+    await assistant.say("Oi meu amigo! Como eu posso ajudar?", allow_interruptions=True)
 
     while ctx.room.connection_state == rtc.ConnectionState.CONN_CONNECTED:
+        # video tracking of each idea
         video_track = await get_video_track(ctx.room)
 
         async for event in rtc.VideoStream(video_track):
@@ -134,6 +142,8 @@ async def entrypoint(ctx: JobContext):
             # and store it in a variable.
             latest_image = event.frame
 
+async def request_fnc(req: JobRequest) -> None:
+    await req.accept(entrypoint)
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(WorkerOptions(request_fnc))
